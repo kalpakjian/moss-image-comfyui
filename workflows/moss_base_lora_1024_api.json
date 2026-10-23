@@ -1,0 +1,142 @@
+{
+ "prompt": {
+  "1": {
+   "class_type": "UNETLoader",
+   "inputs": {
+    "unet_name": "moss_image_base_int8_convrot.safetensors",
+    "weight_dtype": "default"
+   }
+  },
+  "2": {
+   "class_type": "CLIPLoader",
+   "inputs": {
+    "clip_name": "qwen3.5_9b_int8_convrot.safetensors",
+    "type": "moss_image"
+   }
+  },
+  "3": {
+   "class_type": "VAELoader",
+   "inputs": {
+    "vae_name": "flux2-vae_small.safetensors"
+   }
+  },
+  "4": {
+   "class_type": "ModelSamplingAuraFlow",
+   "inputs": {
+    "model": [
+     "1",
+     0
+    ],
+    "shift": 5.0
+   }
+  },
+  "5": {
+   "class_type": "CLIPTextEncode",
+   "inputs": {
+    "text": "A rustic attic workshop with a battered wooden workbench, hand tools hanging on the wall, dust motes in a shaft of afternoon light, warm amber tones, photorealistic, high detail",
+    "clip": [
+     "2",
+     0
+    ]
+   }
+  },
+  "6": {
+   "class_type": "CLIPTextEncode",
+   "inputs": {
+    "text": "nsfw, worst quality, bad anatomy, watermark, jpeg artifact",
+    "clip": [
+     "2",
+     0
+    ]
+   }
+  },
+  "7": {
+   "class_type": "SkipLayerGuidanceDiTSimple",
+   "inputs": {
+    "model": [
+     "4",
+     0
+    ],
+    "single_layers": "22",
+    "double_layers": "",
+    "start_percent": 0.0,
+    "end_percent": 1.0
+   }
+  },
+  "8": {
+   "class_type": "EmptyLatentImage",
+   "inputs": {
+    "width": 1024,
+    "height": 1024,
+    "batch_size": 1
+   }
+  },
+  "9": {
+   "class_type": "LoraLoader",
+   "inputs": {
+    "lora_name": "moss_studio_lora-lycoris.safetensors",
+    "strength_model": 1.0,
+    "strength_clip": 0.0,
+    "model": [
+     "7",
+     0
+    ],
+    "clip": [
+     "2",
+     0
+    ]
+   }
+  },
+  "10": {
+   "class_type": "KSampler",
+   "inputs": {
+    "model": [
+     "9",
+     0
+    ],
+    "seed": 777,
+    "steps": 50,
+    "cfg": 3.0,
+    "sampler_name": "euler",
+    "scheduler": "sgm_uniform",
+    "positive": [
+     "5",
+     0
+    ],
+    "negative": [
+     "6",
+     0
+    ],
+    "latent_image": [
+     "8",
+     0
+    ],
+    "denoise": 1.0
+   }
+  },
+  "11": {
+   "class_type": "VAEDecode",
+   "inputs": {
+    "samples": [
+     "10",
+     0
+    ],
+    "vae": [
+     "3",
+     0
+    ]
+   }
+  },
+  "12": {
+   "class_type": "SaveImage",
+   "inputs": {
+    "filename_prefix": "moss_test",
+    "images": [
+     "11",
+     0
+    ]
+   }
+  }
+ },
+ "client_id": "a32d7ce4-4fbc-47ba-8f0c-6518d460a067"
+}

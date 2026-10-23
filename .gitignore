@@ -1,0 +1,43 @@
+__pycache__/
+*.py[cod]
+
+# ===== ComfyUI 本機環境 =====
+/output/
+/input/
+/temp/
+/models/
+/custom_nodes/
+extra_model_paths.yaml
+/.vs
+/.vscode/
+.idea/
+venv*/
+.venv/
+/user/
+*.log
+web_custom_versions/
+.DS_Store
+uv.lock
+.comfy_environment
+
+# ===== AI 模型權重 - 絕不上傳 =====
+*.safetensors
+*.bin
+*.ckpt
+*.pt
+*.pth
+*.gguf
+*.onnx
+*.safetensors.*
+!*.token
+
+# ===== 產出圖 / 快取 =====
+/docs/*.png
+*.pyc
+
+# ===== 執行期資料夾 =====
+python_embeded/
+python_embeded_nightly/
+logs/
+runs/
+wheels/

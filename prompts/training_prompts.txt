@@ -1,0 +1,41 @@
+# 訓練用提示詞範本
+#
+# 用於 LoRA 訓練的資料集：同一「風格」需要多個不同「主體」的提示詞，
+# 這樣 LoRA 學到的是風格而不是某一張圖的內容。
+#
+# 格式：MOSS-Image 官方建議用自然語言描述（tags 亦可），
+# 每張圖配一個同名 .txt sidecar（folder source 格式）。
+#
+# 用 scripts\make_lora_dataset.py 可直接用這些提示詞產生資料集。
+
+## 風格 A：暖色午後光線的居家工作室（本次實測使用）
+
+A cozy sunlit studio corner with a wooden desk, a small potted plant, warm afternoon light through a window, soft shadows, detailed textures, photorealistic, high detail
+
+A sunlit reading nook with a wicker armchair, a stack of books and a floor lamp, warm afternoon light through a window, soft shadows, detailed textures, photorealistic, high detail
+
+A wooden workbench by a bright window with hand tools, a small potted fern, warm afternoon light, soft shadows, detailed textures, photorealistic, high detail
+
+A tidy kitchen corner with a small table, a ceramic mug and a herb pot on the sill, warm morning light through a window, soft shadows, detailed textures, photorealistic, high detail
+
+## 風格 B：閣樓／老屋質地（實測 LoRA 對比時使用）
+
+A rustic attic workshop with a battered wooden workbench, hand tools hanging on the wall, dust motes in a shaft of afternoon light, warm amber tones, photorealistic, high detail
+
+A small atelier corner with an old sewing table, bolts of fabric, a single warm lamp, deep shadows, muted green and cream palette, photorealistic, high detail
+
+## 負向提示詞
+
+官方建議：
+
+nsfw, worst quality, bad anatomy, watermark, jpeg artifact
+
+## 撰寫提示詞的注意事項
+
+1. **一致性優先**：LoRA 資料集的提示詞要共享「風格詞」（光線、色調、質感），
+   只在「主體」上變化（桌子、椅子、工作台…）。全部都一樣 = 過擬合到單一構圖。
+2. **數量**：實測 16 張 × 150 步已能學到明顯風格差異；正式使用建議 20～50 張。
+3. **caption 要描述得到**：MOSS-Image 的 text encoder 吃自然語言描述，
+   caption 太短（例如只寫 "a photo"）會讓 LoRA 學不到東西。
+4. **不要放權重檔**：訓練資料資料夾請保持乾淨，只放圖與 .txt，
+   快取（`cache/`）會自動生成在資料夾內。

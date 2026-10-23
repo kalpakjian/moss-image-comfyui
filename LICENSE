@@ -1,0 +1,33 @@
+MIT License
+
+Copyright (c) 2026 Mike Lau (kalpakjian)
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.
+
+---
+
+本 repo 收錄的工具程式碼以 MIT 授權釋出。
+
+第三方元件與其各自授權：
+- MOSS-Image 模型權重：Apache-2.0（OpenMOSS，https://huggingface.co/Comfy-Org/MOSS-Image）
+- KohakuMossTrainer：KohakuMoss License 1.0（Apache-2.0 + 一項附加條款：
+  以 KohakuMoss 衍生的作品需在名稱中包含 "Kohaku"；訓練出的模型、adapter 與圖片不受此限）
+- ComfyUI：GPL-3.0（Comfy-Org）
+
+本 repo 內含的實測圖片由 MOSS-Image 模型在本機生成，僅供技術示範。
