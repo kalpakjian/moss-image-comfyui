@@ -25,7 +25,7 @@ ComfyUI 原生支援在 **2026-10-16** 合併（commit `e087d8f6`），**v0.42.0
 
 | 標籤 | 解析度 | 像素量 | 耗時 |
 | --- | --- | --- | --- |
-| `sft_1024` | 1024×1024 | 1.05 MP | 3.0 s |
+| `sft_1024` | 1024×1024 | 1.05 MP | 19.4 s |
 | `sft_2048` | 2048×2048 | **4.19 MP** | 84.1 s |
 | `sft_2560` | 2560×2560 | **6.55 MP**（超出官方外推上限） | 147.5 s |
 
@@ -160,6 +160,7 @@ moss-image-comfyui\
 ├── README.md              ← 本檔（主頁面：模型清單 + 快速上手 + 實測數據）
 ├── README_使用說明.md      ← 完整說明、節點接法、踩坑紀錄
 ├── LORA_TRAINING.md        ← KohakuMossTrainer 6GB 訓練全流程
+├── COMPARISON.md           ← MOSS-Image 5B vs Qwen-Image 2.1 同機實測比較
 ├── LICENSE                ← MIT
 ├── scripts\
 │   ├── moss_workflow.py       # 工作流程產生器（含 LoRA 版本）
@@ -168,7 +169,11 @@ moss-image-comfyui\
 │   ├── make_lora_dataset.py   # 從提示詞生資料集 + caption sidecar
 │   ├── make_compare.py        # 三種對比圖
 │   ├── run_batch.ps1          # 解析度矩陣批次
-│   └── run_lora_compare.ps1   # Base vs Base+LoRA 批次
+│   ├── run_lora_compare.ps1   # Base vs Base+LoRA 批次
+│   ├── head_to_head.py        # MOSS vs Qwen 對打（耗時／VRAM 量測）
+│   ├── run_h2h.ps1            # 對打批次執行器
+│   ├── make_h2h_compare.py    # 對打對比圖產生器
+│   └── cache_test.py          # 驗證 ComfyUI 節點快取對量測的影響
 ├── workflows\             ← 可直接拖進 ComfyUI 的 API 工作流
 │   ├── moss_sft_1024_api.json
 │   ├── moss_sft_2048_2k_api.json
@@ -176,7 +181,8 @@ moss-image-comfyui\
 │   ├── moss_base_1024_api.json
 │   └── moss_base_lora_1024_api.json
 ├── prompts\               ← 訓練用提示詞範本
-└── docs\                  ← 實測輸出圖與範例 log
+└── docs\                  ← 實測輸出圖、對比圖與範例 log
+    └── compare\           ← MOSS vs Qwen 並排對比圖
 ```
 
 ## 七、注意事項
@@ -193,6 +199,7 @@ moss-image-comfyui\
 
 - [README_使用說明.md](README_使用說明.md) — 完整說明、節點接法、全部踩坑紀錄
 - [LORA_TRAINING.md](LORA_TRAINING.md) — 6GB 訓練全流程、資料集格式、匯出與驗證
+- **[COMPARISON.md](COMPARISON.md) — MOSS-Image 5B vs Qwen-Image 2.1 同機實測比較**（耗時／VRAM／文字渲染／功能對照）
 
 ## 九、部落格文章
 

@@ -103,7 +103,7 @@ ComfyUI\models\
 
 | 解析度 | 像素量 | 實測耗時 | 備註 |
 | --- | --- | --- | --- |
-| 1024×1024 | 1.05 MP | 3.0 s | 官方推薦區間 |
+| 1024×1024 | 1.05 MP | 19.4 s | 官方推薦區間 |
 | 2048×2048 | 4.19 MP | 84.1 s | 官方外推上限（≈2K） |
 | 2560×2560 | 6.55 MP | 147.5 s | 超出官方外推上限，實測仍可 |
 
@@ -257,6 +257,33 @@ cmd /c "del \\?\D:\AI\ComfyUI\nul"
 `git merge-base main upstream/master` 會失敗、沒有共同祖先。
 直接 `git rebase` 或 `git merge` 會產生大量衝突。
 **解法**：以 `upstream/<tag>` 為基底 checkout，再用 `cherry-pick` 重放自己的 commit。
+
+### 5.10 ComfyUI 的節點快取會讓耗時量測失真（最容易犯的錯）
+
+ComfyUI 會依**節點輸入**做執行快取。若整條工作流程
+（模型、seed、prompt、steps…全部相同）之前跑過，ComfyUI 會直接回傳上次的結果，
+**不重新取樣**。
+
+實測踩到的坑：先跑了一份 smoke test（`wf_smoke.json`，seed 42 / 1024×1024 / SFT），
+之後批次測試又用**逐字相同**的 `wf_sft_1024.json`（只差 `client_id`），
+結果量到 **3.0 秒**——但同一份工作流程重新跑（換 seed）其實要 **19.4 秒**。
+
+**後果**：這個 3.0 秒曾被當成真實數字寫進 README 與部落格文章，後來才更正。
+
+**怎麼避免：**
+
+1. 量測前先呼叫 `/free` 讓模型卸載（重載模型會使快取失效）
+2. 或每次量測都換 seed
+3. 驗證方式：把同一份 workflow 連跑兩次，第二次會異常地快 → 就是命中快取
+
+```powershell
+# 伺服器端精確計時（比腳本端更可靠）
+Invoke-RestMethod http://127.0.0.1:8188/history | ConvertTo-Json -Depth 6
+# 每筆的 status.messages 裡有 execution_start / execution_success 的 timestamp
+```
+
+> 這也是為什麼本 repo 的對打腳本會在每次生成前呼叫 `/free`：
+> `scripts/head_to_head.py` 的 `free_memory()`。
 
 ## 六、已知限制
 
