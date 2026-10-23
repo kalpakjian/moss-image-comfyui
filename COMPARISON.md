@@ -145,20 +145,94 @@ ComfyUI 會依**節點輸入**做執行快取。若整條工作流程（模型�
 
 ## 四、各項能力對照
 
+> ✅＝本機實測通過　⚠️＝實測有但有落差　📄＝僅官方文件記載，未實測
+
 | 能力 | MOSS-Image 5B | Qwen-Image 2.1 |
 | --- | --- | --- |
 | 中英文大標題渲染 | ✅ 實測完美 | ✅ 實測完美 |
 | 密集小字 | ❌ 亂碼 | ❌ 亂碼 |
-| **JSON Layout 精準控制** | ✅ **獨有**（`MOSSImageLayoutPrompt` 節點，文字/物件可指定 bbox、支援編輯與增減） | ❌ |
-| **圖像編輯** | ❌（需自行 fine-tune） | ✅ **原生**（同一份權重做生成與編輯） |
-| **多圖參考** | ❌ | ✅ 最多 16 張（`TextEncodeQwenImage21` 的 `image_1`～`image_16`） |
-| **局部編輯** | ❌ | ✅（描述要改的區域，其餘保持） |
-| **Alpha 透明背景** | ❌ | ✅ **獨有**（4 通道 VAE，可直接生成透明背景） |
-| Prompt 自動改寫 | ❌ | ✅ 可選（`refine_prompt`，另需一個 PE text encoder） |
-| KV cache 加速 | ❌ | ✅ `QwenImage21Cache`（auto/gpu/cpu/off × default/int8/int4） |
-| 蒸餾加速 LoRA | 官方「進行中」 | ✅ 社群 Lightning 4 步 LoRA |
-| **LoRA 訓練** | ✅ **官方第一方支援**（KohakuMossTrainer，6 GB 起步） | ✅ 社群支援（DiffSynth-Studio） |
+| **JSON Layout 精準控制** | ✅ **獨有**，bbox 實測精準命中 | ❌ |
+| **圖像編輯 / 局部編輯** | ❌ | ✅ 實測可用（**須用 `<image1>`** 指涉參考圖） |
+| **多圖參考** | ❌ | ✅ 實測可用（`image_1` / `image_2` 同時餵入） |
+| **Alpha 透明背景** | ❌ | ⚠️ VAE 確實解出 4 通道 RGBA，但實測 0% 完全透明、去背效果有限 |
+| Prompt 自動改寫 | ❌ | 📄 可選（`refine_prompt`，另需一個 PE text encoder） |
+| KV cache 加速 | ❌ | 📄 `QwenImage21Cache`（auto/gpu/cpu/off × default/int8/int4） |
+| 蒸餾加速 LoRA | 官方「進行中」 | 📄 社群 Lightning 4 步 LoRA |
+| **LoRA 訓練** | ✅ **官方第一方支援**（KohakuMossTrainer，6.20 GiB 實測可跑） | 📄 社群支援（DiffSynth-Studio） |
 | 推薦文字語言 | 英文（中文亦支援） | 中英皆可，英文 prompt 增強尤佳 |
+
+### 4.1 MOSS JSON Layout 實測
+
+指定 bbox 後，文字與物件**精確落在指定位置**：
+
+![MOSS JSON Layout 實測](docs/compare/moss_layout.jpg)
+
+用官方 README 的 Python API 寫法（layout JSON 直接當 prompt 傳）：
+
+```json
+{"summary":{"caption":"A minimalist travel poster with a cream background, a blue mountain illustration, and the title EXPLORE at the top."},
+ "items":[{"label":"text","caption":"Large dark-blue uppercase title centered at the top.","text":"EXPLORE","bbox":[-472,-308,-348,308]},
+          {"label":"object","caption":"A flat blue mountain illustration in the lower center.","bbox":[-256,-205,410,205]}],
+ "bbox_coord_space":"abs_centralized","bbox_format":"yxyx"}
+```
+
+> ⚠️ **`MOSSImageLayoutPrompt` 節點在 API 模式下不能用**：
+> `element` 是 ARRAY 型、驗證時會對元素取 hash（dict 不可 hash），
+> 而正確來源 `CreateBoundingBoxes` 的 `editor_state` 是 `BOUNDING_BOXES`
+> socketless widget、必須由畫布連線進來，沒有節點輸出該型別。
+> **解法：直接用上面的 JSON 寫法**（官方 README 也這樣建議）。
+
+### 4.2 Qwen 圖像編輯實測
+
+![Qwen 圖像編輯實測](docs/compare/qwen_edit.jpg)
+
+指令寫法（**關鍵**）：
+
+```
+Keep the room, the window, the plant, the lamp and the bed in <image1> exactly as they are.
+Only replace the wooden desk in <image1> with a dark walnut desk.
+```
+
+> ⚠️ **必須用 `<image1>` 明確指涉參考圖。**
+> 第一次測試沒寫 `<image1>`，模型把它當一般 t2i 重新生成了一張新圖（房間都變了）。
+> 加上 `<image1>` 後才真的做到「只改指定部位、其餘保留」。
+
+### 4.3 Qwen 多圖參考實測
+
+![Qwen 多圖參考實測](docs/compare/qwen_multiref.jpg)
+
+`TextEncodeQwenImage21` 的 `images` 用 dict 格式（最多 16 張）：
+
+```json
+"images": {"image_1": ["4", 0], "image_2": ["5", 0]}
+```
+
+prompt 裡用 `<image1>` / `<image2>` 指涉各張。
+
+### 4.4 Qwen Alpha 通道實測（有但要正確用）
+
+| 測試 | 輸出模式 | 完全透明 | 半透明 | 完全不透明 |
+| --- | --- | --- | --- | --- |
+| 一般 t2i（prompt 寫 transparent background） | **RGBA** | 0.0% | 1.3% | 98.7% |
+| 官方去背做法（編輯 +「output a PNG image」） | **RGBA** | 0.0% | 6.7% | 93.3% |
+
+- **VAE 確實解出 4 通道**（輸出檔是 RGBA）
+- 但**一般 t2i 不會給你透明背景** —— 只是多了一個幾乎全滿的 alpha 通道
+- 官方 `background_removal` 範本的做法是「編輯 + 指示輸出 PNG」，
+  透明背景是**模型生成進 alpha 通道**、不是事後抠图；
+  實測背景乾淨時有改善，但**沒有到完全透明**，主體邊緣也不是乾淨 alpha
+
+> **結論：要透明背景，Qwen 是「比較接近」而不是「開箱即用」。**
+> 真的要乾淨去背，傳統工具（rembg 等）仍然更可靠。
+
+### 4.5 一句話總結
+
+> **Qwen-Image 2.1 是「什麼都能做、而且快」的成熟產品；**
+> **MOSS-Image 5B 是「小、便宜、而且能精準控制版面」的基底模型。**
+>
+> 兩者的**文字渲染能力在實測中幾乎打平**（大標題都完美、小字都亂碼）。
+> 真正的分野不在畫質，而在**功能邊界**：
+> Qwen 有編輯與多圖參考，MOSS 有 layout 與官方 LoRA 生態。
 
 ## 五、結論與選用建議
 
@@ -201,8 +275,13 @@ ComfyUI 會依**節點輸入**做執行快取。若整條工作流程（模型�
   官方範本用 int8 版，VRAM 數字會再低一些
 - 3 組提示詞的視覺比較是**主觀判讀**，非盲測或量化指標
 - 未測 ControlNet / 角色一致性 / LoRA 品質
+- **Qwen 的 prompt 自動改寫、KV cache、Lightning 4 步 LoRA 仍只有官方文件記載，未實測**
 
-## 七、重現方式
+## 七、相關文件
+
+- **[DECISION.md](DECISION.md) — 選用速查卡**（什麼時候用哪一個，一頁看完）
+
+## 八、重現方式
 
 ```powershell
 # 完整對打（3 提示詞 × 2 模型 × 3 解析度 = 18 次）
@@ -210,6 +289,9 @@ powershell -ExecutionPolicy Bypass -File scripts\run_h2h.ps1 -Out output\h2h -Si
 
 # 產生對比圖
 python scripts\make_h2h_compare.py
+
+# 五項獨有能力驗證（alpha / 編輯 / 多圖參考 / 去背 / MOSS Layout）
+python scripts\verify_qwen_extras.py output\extras
 
 # 驗證 ComfyUI 節點快取會不會影響量測
 python scripts\cache_test.py

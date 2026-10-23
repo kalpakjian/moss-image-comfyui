@@ -161,6 +161,7 @@ moss-image-comfyui\
 ├── README_使用說明.md      ← 完整說明、節點接法、踩坑紀錄
 ├── LORA_TRAINING.md        ← KohakuMossTrainer 6GB 訓練全流程
 ├── COMPARISON.md           ← MOSS-Image 5B vs Qwen-Image 2.1 同機實測比較
+├── DECISION.md             ← 選用速查卡（什麼時候用哪一個）
 ├── LICENSE                ← MIT
 ├── scripts\
 │   ├── moss_workflow.py       # 工作流程產生器（含 LoRA 版本）
@@ -173,6 +174,7 @@ moss-image-comfyui\
 │   ├── head_to_head.py        # MOSS vs Qwen 對打（耗時／VRAM 量測）
 │   ├── run_h2h.ps1            # 對打批次執行器
 │   ├── make_h2h_compare.py    # 對打對比圖產生器
+│   ├── verify_qwen_extras.py  # 五項獨有能力驗證（alpha/編輯/多圖/去背/Layout）
 │   └── cache_test.py          # 驗證 ComfyUI 節點快取對量測的影響
 ├── workflows\             ← 可直接拖進 ComfyUI 的 API 工作流
 │   ├── moss_sft_1024_api.json
@@ -200,6 +202,7 @@ moss-image-comfyui\
 - [README_使用說明.md](README_使用說明.md) — 完整說明、節點接法、全部踩坑紀錄
 - [LORA_TRAINING.md](LORA_TRAINING.md) — 6GB 訓練全流程、資料集格式、匯出與驗證
 - **[COMPARISON.md](COMPARISON.md) — MOSS-Image 5B vs Qwen-Image 2.1 同機實測比較**（耗時／VRAM／文字渲染／功能對照）
+- **[DECISION.md](DECISION.md) — 選用速查卡**（什麼時候用哪一個，一頁看完）
 
 ## 九、部落格文章
 
