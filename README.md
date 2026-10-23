@@ -194,7 +194,13 @@ moss-image-comfyui\
 - [README_使用說明.md](README_使用說明.md) — 完整說明、節點接法、全部踩坑紀錄
 - [LORA_TRAINING.md](LORA_TRAINING.md) — 6GB 訓練全流程、資料集格式、匯出與驗證
 
-## 九、參考資料
+## 九、部落格文章
+
+完整實測紀錄（含逐張對比圖與踩坑整理）：
+
+**🔗 [MOSS-Image 5B 實測筆記：直出 4MP、6GB 訓練 LoRA（Windows / ComfyUI）](https://kalpakjian.github.io/2026/10/23/moss-image-5b-notes/)**
+
+## 十、參考資料
 
 - MOSS-Image：https://github.com/OpenMOSS/MOSS-Image ｜ arXiv:2610.23374
 - ComfyUI 原生支援 PR：https://github.com/Comfy-Org/ComfyUI/pull/17095
