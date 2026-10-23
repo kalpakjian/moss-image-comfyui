@@ -14,7 +14,8 @@
 | 要**把文字放到指定位置**（海報版面、產品圖） | **MOSS** | ✅ 實測 bbox 精準命中 |
 | 要**練自己的 LoRA**（尤其真人） | **MOSS** | ✅ 官方第一方工具，6.20 GiB 實測可跑 |
 | 顯卡 **< 24GB** | **MOSS** | 實測 15.4～23.1 GiB vs Qwen 23.0～23.2 GiB |
-| 日常出圖、**量大** | **Qwen** | 快 1.6～3.0 倍 |
+| 日常出圖、**量大** | **Qwen** | 快 1.6～3.0 倍；裝 Lightning LoRA 可再快 3.3 倍 |
+| 要出**帶字的海報**、想要更專業的版面 | **Qwen + PE 改寫** | 實測差異最明顯（亂碼標題 → 正確標題） |
 | 只是要一張**寫實照片 / 中文大標題** | **Qwen** | 實測畫質打平，選快的即可 |
 
 ---
@@ -154,6 +155,48 @@ prompt 裡用 `<image1>` / `<image2>` 指涉各張。
 
 ---
 
+### Qwen-Image 2.1：Prompt 自動改寫 ✅（對文字渲染特別有用）
+
+![Prompt 自動改寫對比](docs/compare/pe_compare.jpg)
+
+輸入只有六個字 `a cafe poster`，PE 模型改寫成一份完整的結構化海報概念書
+（含配色、邊框、主標題字樣、插畫描述），再餵給影像模型：
+
+| | 標題 | 畫面 |
+| --- | --- | --- |
+| 原始 prompt 直接生成 | `BIRON H TREE`（亂碼） | 構圖雜亂 |
+| **PE 改寫後** | `GOOD COFFEE, Good Day`（正確） | 專業海報，含插畫與菜單板 |
+| PE thinking 模式 | `BREWED Goodness` + `COZY CUPS COFFEE · PASTRIES · GOOD VIBES` | 更精緻 |
+
+> **為什麼值得特別提**：PE 把「想渲染的文案」明確寫進 prompt，
+> 模型就不會自己亂猜要寫什麼字。**要出帶字的海報，PE 是最快的改善手段。**
+>
+> 實測耗時 18.8～22.0 秒（含 PE 模型載入與改寫），
+> PE text encoder 本身要 **8.82 GiB**（`qwen3.5_9b_qwen_image_2.1_pe_t2i`）。
+
+### Qwen-Image 2.1：4 步快速出圖 ✅（Lightning LoRA）
+
+![Lightning 4 步 LoRA 對比](docs/compare/lightning_compare.jpg)
+
+| 設定 | 耗時 | 品質 |
+| --- | --- | --- |
+| 官方 25 步 | 4.9 s | 正常 |
+| **Lightning LoRA + 4 步** | **1.5 s** | ✅ 不輸 25 步 |
+| 只有 4 步（無 LoRA） | 1.2 s | ❌ 明顯糊掉 |
+
+> **LoRA 才是關鍵**：單純把 steps 砍到 4 不會有效果，base 模型需要對應的蒸餾排程。
+> LoRA 只有 **64 MB**（`lightx2v/Qwen-Image-2.1-Lightning`）。
+> 官方另有 Qwen-Image-2.1 Turbo（8 步 / cfg 1），本機未實測。
+
+### Qwen-Image 2.1：KV cache ⚠️ 可用但 24GB 卡上沒差異
+
+`QwenImage21Cache` 五種設定（不放節點 / off / auto / cpu+int8 / gpu+int4）
+實測 **4.5～4.9 秒**，差異在雜訊範圍內。
+
+節點 tooltip 說的是「quantization **potentially speeds up edit workflows when memory
+starved**」——這是**記憶體吃緊時的解法**。24GB 卡跑 1024² 單張參考圖不缺記憶體，
+所以看不出來。**在 24GB 卡上這個節點可以先不用管。**
+
 ## 五、實務組合建議
 
 兩套權重可以共存（檔名不衝突，共約 42 GB），**不必二選一**：
@@ -192,6 +235,11 @@ python scripts\make_h2h_compare.py output\h2h output\h2h_compare
 
 # 五項獨有能力驗證（alpha / 編輯 / 多圖參考 / 去背 / MOSS Layout）
 python scripts\verify_qwen_extras.py output\extras
+
+# 加速功能驗證（KV cache 五種設定 / Lightning 4 步 LoRA / PE 自動改寫）
+python scripts\verify_qwen_accel.py output\accel
+# 只跑 PE（需先裝好 8.82 GiB 的 PE text encoder）
+python scripts\verify_qwen_accel.py output\accel --pe-only
 
 # 驗證 ComfyUI 節點快取對量測的影響
 python scripts\cache_test.py

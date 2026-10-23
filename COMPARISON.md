@@ -155,9 +155,9 @@ ComfyUI 會依**節點輸入**做執行快取。若整條工作流程（模型�
 | **圖像編輯 / 局部編輯** | ❌ | ✅ 實測可用（**須用 `<image1>`** 指涉參考圖） |
 | **多圖參考** | ❌ | ✅ 實測可用（`image_1` / `image_2` 同時餵入） |
 | **Alpha 透明背景** | ❌ | ⚠️ VAE 確實解出 4 通道 RGBA，但實測 0% 完全透明、去背效果有限 |
-| Prompt 自動改寫 | ❌ | 📄 可選（`refine_prompt`，另需一個 PE text encoder） |
-| KV cache 加速 | ❌ | 📄 `QwenImage21Cache`（auto/gpu/cpu/off × default/int8/int4） |
-| 蒸餾加速 LoRA | 官方「進行中」 | 📄 社群 Lightning 4 步 LoRA |
+| **Prompt 自動改寫** | ❌ | ✅ 實測可用（`TextGenerate` + PE text encoder） |
+| KV cache 加速 | ❌ | ✅ 可用，但實測**無速度差異**（見 4.6） |
+| 蒸餾加速 LoRA | 官方「進行中」 | ✅ 實測可用（Lightning 4 步，3.3× 加速） |
 | **LoRA 訓練** | ✅ **官方第一方支援**（KohakuMossTrainer，6.20 GiB 實測可跑） | 📄 社群支援（DiffSynth-Studio） |
 | 推薦文字語言 | 英文（中文亦支援） | 中英皆可，英文 prompt 增強尤佳 |
 
@@ -225,7 +225,109 @@ prompt 裡用 `<image1>` / `<image2>` 指涉各張。
 > **結論：要透明背景，Qwen 是「比較接近」而不是「開箱即用」。**
 > 真的要乾淨去背，傳統工具（rembg 等）仍然更可靠。
 
-### 4.5 一句話總結
+### 4.5 Qwen Prompt 自動改寫（Prompt Enhancer）實測
+
+![Prompt 自動改寫對比](docs/compare/pe_compare.jpg)
+
+輸入只有六個字 `a cafe poster`，PE 模型改寫成一份完整的結構化海報概念書：
+
+> Here is a complete concept for a warm, vintage-style café poster. The design uses earthy
+> browns, cream paper texture, botanical line art, and clear typographic hierarchy…
+>
+> ### **Poster Concept: "Good Coffee, Good Day"**
+> A vertical A2-style café wall poster with a distressed cream background, dark coffee-brown
+> border, central headline, product illustration, menu board, and footer details.
+>
+> * **Background:** Warm aged parchment beige with subtle grain, speckles, and worn edges.
+> * **Border:** A double-line rectangular frame in dark espresso brown…
+> * **Main Headline (Upper Center):** Large condensed serif lettering reading "GOOD COFFEE," in dark brown.
+
+**效果差異非常明顯**：
+
+| | 標題 | 畫面 |
+| --- | --- | --- |
+| 原始 prompt 直接生成 | `BIRON H TREE`（亂碼） | 構圖雜亂 |
+| PE 改寫後 | `GOOD COFFEE, Good Day`（正確） | 專業海報，含插畫與菜單板 |
+| PE thinking 模式 | `BREWED Goodness` + `COZY CUPS COFFEE · PASTRIES · GOOD VIBES` | 更精緻 |
+
+> **PE 對「文字渲染」特別有價值**——因為它把想渲染的文案明確寫進去，
+> 模型就不會自己亂猜要寫什麼字。
+
+**接法**（`TextGenerate` 的 display name 是 **Generate Text**）：
+
+```
+CLIPLoader(qwen3.5_9b_qwen_image_2.1_pe_t2i.int8_convrot, type=moss_image)
+  └─ TextGenerate(clip, prompt=原始 prompt, max_length=1024,
+                  sampling_mode="on",
+                  "sampling_mode.temperature"=0.7, "sampling_mode.top_k"=64,
+                  "sampling_mode.top_p"=0.95, "sampling_mode.min_p"=0.05,
+                  "sampling_mode.repetition_penalty"=1.05, "sampling_mode.seed"=42,
+                  thinking=False/True, use_default_template=True)
+       └─ TextEncodeQwenImage21(prompt=改寫後的文字)
+            └─ KSampler → VAEDecode → SaveImage
+```
+
+> ⚠️ **兩個 API 陷阱：**
+> 1. `TextGenerate` 的 `sampling_mode` 是 **dynamic combo**：
+>    API 要傳**選項 key 字串**（`"on"` / `"off"`），
+>    子參數要帶 **`"sampling_mode."` 前綴**（如 `"sampling_mode.seed"`），
+>    平鋪或用 dict 包都會失敗。
+> 2. `TextEncodeQwenImage21` 的輸入名是 **`prompt`** 不是 `text`。
+>
+> 實測耗時（含 PE 模型載入與改寫）：**18.8～22.0 秒**。
+
+### 4.6 Qwen KV cache 實測：**無速度差異**
+
+`QwenImage21Cache` 有 `device`（auto/gpu/cpu/off）與 `dtype`（default/int8/int4），
+官方說「off 會每步重算 prefix，是排除 cache 影響的方法」。
+
+在**編輯工作流程**（1024×1024、1 張參考圖、25 步）實測五種設定：
+
+| 設定 | 耗時 |
+| --- | --- |
+| 完全不放 cache 節點 | **4.6 s** |
+| `device=off, dtype=default`（控制組） | **4.5 s** |
+| `device=auto, dtype=default`（預設） | **4.6 s** |
+| `device=cpu, dtype=int8` | **4.9 s** |
+| `device=gpu, dtype=int4` | **4.5 s** |
+
+**結論：五種設定幾乎沒有差異（4.5～4.9 秒，落在雜訊範圍）。**
+
+原因：節點 tooltip 寫的是「Quantization **potentially speeds up edit workflows when
+memory starved**」——這是**記憶體吃緊時的解法，不是速度優化**。
+24GB 卡跑 1024² 單張參考圖本來就不缺記憶體，cache 省下的那點重算成本可以忽略。
+
+> **什麼時候才有意義？** 2K 以上 + 多張參考圖（最多 16 張）把 VRAM 撐滿時，
+> 才有機會看到差別。本機 24GB 跑不滿那個條件，所以無法實測。
+> 換句話說：**在 24GB 卡上，這個節點可以先不用管。**
+
+### 4.7 Qwen Lightning 4 步 LoRA 實測：**3.3 倍加速且品質不輸**
+
+![Lightning 4 步 LoRA 對比](docs/compare/lightning_compare.jpg)
+
+| 設定 | 耗時 | 畫面品質 |
+| --- | --- | --- |
+| 官方 25 步（無 LoRA） | **4.9 s** | 正常 |
+| **Lightning LoRA + 4 步** | **1.5 s** | ✅ 細節豐富（紅白條紋、岩石前景、雲層紋理），**不輸 25 步** |
+| 只有 4 步（無 LoRA） | 1.2 s | ❌ **明顯糊掉**，塔身糊成一片 |
+
+> **重點：LoRA 才是讓 4 步可行的關鍵。**
+> 同樣 4 步，加 LoRA 品質完好、不加 LoRA 直接崩掉——
+> base 模型需要的是對應的蒸餾排程，單純把 steps 砍到 4 不會有效果。
+
+**接法**：
+
+```
+UNETLoader → LoraLoaderModelOnly(lora_name=Qwen-Image-2.1-Lightning-...safetensors,
+                                  strength_model=1.0) → KSampler(steps=4, cfg=1, euler, simple)
+```
+
+LoRA 檔案：`lightx2v/Qwen-Image-2.1-Lightning` 的 `pytorch_lora_weights.safetensors`（**64 MB**）。
+
+> 官方另有 **Qwen-Image-2.1 Turbo**（完整模型或 `qwen_image_2.1_turbo_lora_avg_rank_178_bf16.safetensors`），
+> 官方建議 **8 步 / cfg 1**（不是 4 步）。本機未實測。
+
+### 4.8 一句話總結
 
 > **Qwen-Image 2.1 是「什麼都能做、而且快」的成熟產品；**
 > **MOSS-Image 5B 是「小、便宜、而且能精準控制版面」的基底模型。**
@@ -275,7 +377,10 @@ prompt 裡用 `<image1>` / `<image2>` 指涉各張。
   官方範本用 int8 版，VRAM 數字會再低一些
 - 3 組提示詞的視覺比較是**主觀判讀**，非盲測或量化指標
 - 未測 ControlNet / 角色一致性 / LoRA 品質
-- **Qwen 的 prompt 自動改寫、KV cache、Lightning 4 步 LoRA 仍只有官方文件記載，未實測**
+- **Qwen 的官方 Turbo 模型／Turbo LoRA 未實測**（官方建議 8 步 / cfg 1）；
+  已實測的是社群 `lightx2v/Qwen-Image-2.1-Lightning`（4 步）
+- **KV cache 在「記憶體吃緊」情境下的效果無法在本機驗證**：
+  24GB 卡跑 1024² 單張參考圖本來就不缺記憶體，五種設定實測無差異
 
 ## 七、相關文件
 
