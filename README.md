@@ -176,6 +176,7 @@ moss-image-comfyui\
 │   ├── make_h2h_compare.py    # 對打對比圖產生器
 │   ├── verify_qwen_extras.py  # 五項獨有能力驗證（alpha/編輯/多圖/去背/Layout）
 │   ├── verify_qwen_accel.py   # 加速功能驗證（KV cache / Lightning LoRA / PE 改寫）
+│   ├── verify_qwen_accel2.py  # 第二輪（官方 Turbo LoRA / MOSS 色深控制 / KV 記憶體吃緊）
 │   └── cache_test.py          # 驗證 ComfyUI 節點快取對量測的影響
 ├── workflows\             ← 可直接拖進 ComfyUI 的 API 工作流
 │   ├── moss_sft_1024_api.json

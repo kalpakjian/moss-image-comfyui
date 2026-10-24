@@ -156,8 +156,9 @@ ComfyUI 會依**節點輸入**做執行快取。若整條工作流程（模型�
 | **多圖參考** | ❌ | ✅ 實測可用（`image_1` / `image_2` 同時餵入） |
 | **Alpha 透明背景** | ❌ | ⚠️ VAE 確實解出 4 通道 RGBA，但實測 0% 完全透明、去背效果有限 |
 | **Prompt 自動改寫** | ❌ | ✅ 實測可用（`TextGenerate` + PE text encoder） |
-| KV cache 加速 | ❌ | ✅ 可用，但實測**無速度差異**（見 4.6） |
-| 蒸餾加速 LoRA | 官方「進行中」 | ✅ 實測可用（Lightning 4 步，3.3× 加速） |
+| KV cache 加速 | ❌ | ✅ 記憶體吃緊時快 25%（一般情況無差異） |
+| 蒸餾加速 LoRA | 官方「進行中」（社群有 4 步 adapter） | ✅ 官方 Turbo LoRA 8 步快 4.5×；社群 Lightning 4 步快 8.1× |
+| **色／深控制 adapter** | ✅ **獨有**（`MOSSImageControl` 節點，社群 adapter 實測生效） | ❌ |
 | **LoRA 訓練** | ✅ **官方第一方支援**（KohakuMossTrainer，6.20 GiB 實測可跑） | 📄 社群支援（DiffSynth-Studio） |
 | 推薦文字語言 | 英文（中文亦支援） | 中英皆可，英文 prompt 增強尤佳 |
 
@@ -276,12 +277,12 @@ CLIPLoader(qwen3.5_9b_qwen_image_2.1_pe_t2i.int8_convrot, type=moss_image)
 >
 > 實測耗時（含 PE 模型載入與改寫）：**18.8～22.0 秒**。
 
-### 4.6 Qwen KV cache 實測：**無速度差異**
+### 4.6 Qwen KV cache 實測：**一般情況無差異，記憶體吃緊時快 25%**
 
 `QwenImage21Cache` 有 `device`（auto/gpu/cpu/off）與 `dtype`（default/int8/int4），
 官方說「off 會每步重算 prefix，是排除 cache 影響的方法」。
 
-在**編輯工作流程**（1024×1024、1 張參考圖、25 步）實測五種設定：
+**情境 A：一般情況（1024×1024、1 張參考圖、25 步）**
 
 | 設定 | 耗時 |
 | --- | --- |
@@ -291,43 +292,97 @@ CLIPLoader(qwen3.5_9b_qwen_image_2.1_pe_t2i.int8_convrot, type=moss_image)
 | `device=cpu, dtype=int8` | **4.9 s** |
 | `device=gpu, dtype=int4` | **4.5 s** |
 
-**結論：五種設定幾乎沒有差異（4.5～4.9 秒，落在雜訊範圍）。**
+**五種設定幾乎沒有差異（4.5～4.9 秒，落在雜訊範圍）。**
 
-原因：節點 tooltip 寫的是「Quantization **potentially speeds up edit workflows when
-memory starved**」——這是**記憶體吃緊時的解法，不是速度優化**。
-24GB 卡跑 1024² 單張參考圖本來就不缺記憶體，cache 省下的那點重算成本可以忽略。
+**情境 B：記憶體吃緊（2048×2048、8 張參考圖、25 步）**
 
-> **什麼時候才有意義？** 2K 以上 + 多張參考圖（最多 16 張）把 VRAM 撐滿時，
-> 才有機會看到差別。本機 24GB 跑不滿那個條件，所以無法實測。
-> 換句話說：**在 24GB 卡上，這個節點可以先不用管。**
-
-### 4.7 Qwen Lightning 4 步 LoRA 實測：**3.3 倍加速且品質不輸**
-
-![Lightning 4 步 LoRA 對比](docs/compare/lightning_compare.jpg)
-
-| 設定 | 耗時 | 畫面品質 |
+| 設定 | 耗時 | 差異 |
 | --- | --- | --- |
-| 官方 25 步（無 LoRA） | **4.9 s** | 正常 |
-| **Lightning LoRA + 4 步** | **1.5 s** | ✅ 細節豐富（紅白條紋、岩石前景、雲層紋理），**不輸 25 步** |
-| 只有 4 步（無 LoRA） | 1.2 s | ❌ **明顯糊掉**，塔身糊成一片 |
+| `device=off`（每步重算 prefix） | **31.2 s** | 基準 |
+| `device=auto, dtype=default` | **23.3 s** | **快 25%** |
+| `device=cpu, dtype=int8` | **23.6 s** | **快 24%** |
 
-> **重點：LoRA 才是讓 4 步可行的關鍵。**
-> 同樣 4 步，加 LoRA 品質完好、不加 LoRA 直接崩掉——
+> **結論：KV cache 是「記憶體吃緊時的解法」，不是一般速度優化。**
+>
+> 節點 tooltip 寫的是「Quantization **potentially speeds up edit workflows when
+> memory starved**」——完全準確。
+> 24GB 卡跑 1024² 單張參考圖時不缺記憶體，看不出效果（4.5～4.9 秒雜訊範圍）；
+> 拉高到 2048² + 8 張參考圖後，prefix 重算成本才明顯（31.2 → 23.3 秒，快 25%）。
+>
+> **實務建議**：批次做多參考圖編輯時記得開 `device=auto`；
+> 只出一兩張小圖的話，這個節點可以先不管。
+
+### 4.7 Qwen 加速 LoRA 實測：官方 Turbo 與社群 Lightning
+
+![加速 LoRA 對比](docs/compare/turbo_compare.jpg)
+
+| 設定 | 步數 | 耗時 | 加速比 | LoRA 大小 | 性質 |
+| --- | --- | --- | --- | --- | --- |
+| 無 LoRA（官方推薦） | 25 | **12.2 s** | 1× | — | — |
+| **官方 Turbo LoRA** | 8 | **2.7 s** | **4.5×** | 871 MB | ✅ 官方（`Comfy-Org/Qwen-Image-2.1`） |
+| **社群 Lightning LoRA** | 4 | **1.5 s** | **8.1×** | 64 MB | ⚠️ 社群（`lightx2v`） |
+
+兩者都用 `LoraLoaderModelOnly` + `cfg 1` + `euler`/`simple`：
+
+```
+UNETLoader → LoraLoaderModelOnly(lora_name=..., strength_model=1.0)
+           → KSampler(steps=4 或 8, cfg=1, euler, simple)
+```
+
+> **兩者都實測品質可用**，Lightning 4 步的細節甚至比 25 步更豐富。
+>
+> ⚠️ **但 4 步必須搭配對應的蒸餾 LoRA**：
+> 同樣 4 步、**不加** LoRA 會明顯糊掉（塔身糊成一片）。
 > base 模型需要的是對應的蒸餾排程，單純把 steps 砍到 4 不會有效果。
+>
+> 官方另有完整版 **Qwen-Image-2.1 Turbo** 模型（`qwen_image_2.1_turbo_int8_convrot`），
+> 不需 LoRA；本機未下載測試。
+
+### 4.8 MOSS-Image 色／深控制 adapter 實測 ✅
+
+![MOSS 色／深控制對比](docs/compare/moss_control_compare.jpg)
+
+`MOSSImageControl` 節點 + `moss-control.safetensors`（299 MB，**社群版**，
+`darask0/MOSS-Image-color-depth-control`，Apache-2.0，非 OpenMOSS 官方）。
+
+**控制確實生效** —— 給定色／深對應圖後，3D 人偶精確出現在指定位置：
+
+| 設定 | 耗時 | 結果 |
+| --- | --- | --- |
+| 無控制（`strength=0`） | 13.6 s | 正常真人 |
+| **控制到 50%** | 20.5 s | **3D 人偶出現在指定位置** |
+| **控制到 100%** | 13.4 s | 人偶佔據更大版面 |
 
 **接法**：
 
 ```
-UNETLoader → LoraLoaderModelOnly(lora_name=Qwen-Image-2.1-Lightning-...safetensors,
-                                  strength_model=1.0) → KSampler(steps=4, cfg=1, euler, simple)
+UNETLoader → ModelSamplingAuraFlow(shift=5)
+            → LoraLoader(moss-control.safetensors, strength_model=1.0, strength_clip=0)
+            → SkipLayerGuidanceDiTSimple(single_layers="22")
+CLIPTextEncode(±) ─┐
+LoadImage(color) ──┼─→ MOSSImageControl(positive, negative, vae,
+LoadImage(depth)  ─┘     strength=1.0, start_percent=0.0, end_percent=0.5,
+                          color_map, depth_map) → positive / negative
+                                                → KSampler(50步, CFG 3, euler, sgm_uniform)
 ```
 
-LoRA 檔案：`lightx2v/Qwen-Image-2.1-Lightning` 的 `pytorch_lora_weights.safetensors`（**64 MB**）。
+**輸入格式**（來自 adapter README）：
 
-> 官方另有 **Qwen-Image-2.1 Turbo**（完整模型或 `qwen_image_2.1_turbo_lora_avg_rank_178_bf16.safetensors`），
-> 官方建議 **8 步 / cfg 1**（不是 4 步）。本機未實測。
+- **色域圖**：與輸出同尺寸的 RGB 圖，每個物件／區域一個純色。
+  **顏色只是 ID，不代表實際顏色**；黑色 = 未指定
+- **深度圖**：與輸出同尺寸的灰階圖，**近 = 白**
+- 兩者都可省略（訓練時有 control dropout：色 35% / 深 35% / 兩者 20% / 皆無 10%）
 
-### 4.8 一句話總結
+> ⚠️ **實測重現了 README 明載的「mannequin look」限制**：
+> 餵 3D 人偶的深度圖，輸出会帶出人偶的表面質感。
+> README 建議 `color_end`/`depth_end` = 0.5 並**搭配 region prompts**（每個顏色一句描述），
+> 才會變成「地圖上那個位置的真實人物」。
+> 我這次只給了場景 prompt、沒有 region prompts，所以看到的是人偶。
+>
+> 這個 adapter 是**社群作品**，OpenMOSS 官方未認可；且它替換了 transformer 的
+> `video_embedder`（128 → 384 通道），只對 MOSS-Image transformer 有效。
+
+### 4.9 一句話總結
 
 > **Qwen-Image 2.1 是「什麼都能做、而且快」的成熟產品；**
 > **MOSS-Image 5B 是「小、便宜、而且能精準控制版面」的基底模型。**
@@ -377,10 +432,12 @@ LoRA 檔案：`lightx2v/Qwen-Image-2.1-Lightning` 的 `pytorch_lora_weights.safe
   官方範本用 int8 版，VRAM 數字會再低一些
 - 3 組提示詞的視覺比較是**主觀判讀**，非盲測或量化指標
 - 未測 ControlNet / 角色一致性 / LoRA 品質
-- **Qwen 的官方 Turbo 模型／Turbo LoRA 未實測**（官方建議 8 步 / cfg 1）；
-  已實測的是社群 `lightx2v/Qwen-Image-2.1-Lightning`（4 步）
-- **KV cache 在「記憶體吃緊」情境下的效果無法在本機驗證**：
-  24GB 卡跑 1024² 單張參考圖本來就不缺記憶體，五種設定實測無差異
+- **Qwen 的完整版 Turbo 模型未實測**（只測了 Turbo LoRA，官方建議 8 步 / cfg 1）
+- **MOSS 的 4 步 adapter（`darask0/MOSS-Image_4-step_adapter_lora`）未實測**：
+  它需要自訂節點 `comfyui/rapid-moss/`（README 說標準 `LoraLoaderModelOnly`
+  以 bf16 加 LoRA 會有 81% 相對誤差），且官方建議搭配 bf16 權重（本機是 int8）
+- **MOSS 控制 adapter 是社群作品**，非 OpenMOSS 官方；
+  且未搭配 region prompts 測試（README 指出那才是最佳用法）
 
 ## 七、相關文件
 

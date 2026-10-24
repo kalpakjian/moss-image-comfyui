@@ -14,8 +14,9 @@
 | 要**把文字放到指定位置**（海報版面、產品圖） | **MOSS** | ✅ 實測 bbox 精準命中 |
 | 要**練自己的 LoRA**（尤其真人） | **MOSS** | ✅ 官方第一方工具，6.20 GiB 實測可跑 |
 | 顯卡 **< 24GB** | **MOSS** | 實測 15.4～23.1 GiB vs Qwen 23.0～23.2 GiB |
-| 日常出圖、**量大** | **Qwen** | 快 1.6～3.0 倍；裝 Lightning LoRA 可再快 3.3 倍 |
+| 日常出圖、**量大** | **Qwen** | 快 1.6～3.0 倍；加官方 Turbo LoRA 再快 4.5 倍 |
 | 要出**帶字的海報**、想要更專業的版面 | **Qwen + PE 改寫** | 實測差異最明顯（亂碼標題 → 正確標題） |
+| 要**按草稿／3D 模型擺位**出圖 | **MOSS + 色／深控制** | `MOSSImageControl` 實測能鎖定位置與姿態 |
 | 只是要一張**寫實照片 / 中文大標題** | **Qwen** | 實測畫質打平，選快的即可 |
 
 ---
@@ -174,28 +175,51 @@ prompt 裡用 `<image1>` / `<image2>` 指涉各張。
 > 實測耗時 18.8～22.0 秒（含 PE 模型載入與改寫），
 > PE text encoder 本身要 **8.82 GiB**（`qwen3.5_9b_qwen_image_2.1_pe_t2i`）。
 
-### Qwen-Image 2.1：4 步快速出圖 ✅（Lightning LoRA）
+### Qwen-Image 2.1：加速 LoRA ✅（官方 Turbo 8 步 / 社群 Lightning 4 步）
 
-![Lightning 4 步 LoRA 對比](docs/compare/lightning_compare.jpg)
+![加速 LoRA 對比](docs/compare/turbo_compare.jpg)
 
-| 設定 | 耗時 | 品質 |
+| 設定 | 步數 | 耗時 | 加速比 | LoRA 大小 | 性質 |
+| --- | --- | --- | --- | --- | --- |
+| 無 LoRA（官方推薦） | 25 | 12.2 s | 1× | — | — |
+| **官方 Turbo LoRA** | 8 | **2.7 s** | **4.5×** | 871 MB | ✅ 官方 |
+| **社群 Lightning LoRA** | 4 | **1.5 s** | **8.1×** | 64 MB | ⚠️ 社群 |
+
+> **LoRA 才是讓低步數可行的關鍵** — 單純把 steps 砍到 4 不會有效果，
+> 同樣 4 步不加 LoRA 會明顯糊掉。
+> 官方 Turbo LoRA 品質穩、來源官方；社群 Lightning 更快但只有 64 MB。
+
+### Qwen-Image 2.1：KV cache ⚠️ 記憶體吃緊時才有用
+
+| 情境 | `device=off` | `device=auto` | 差異 |
+| --- | --- | --- | --- |
+| 1024² + 1 張參考圖 | 4.5 s | 4.6 s | 無 |
+| **2048² + 8 張參考圖** | **31.2 s** | **23.3 s** | **快 25%** |
+
+> 節點 tooltip 說的「speeds up edit workflows **when memory starved**」完全準確。
+> 批次做多參考圖編輯時記得開 `device=auto`；出一兩張小圖可以先不管。
+
+### MOSS-Image 5B：色／深控制 adapter ✅
+
+![MOSS 色／深控制對比](docs/compare/moss_control_compare.jpg)
+
+`MOSSImageControl` 節點 + `moss-control.safetensors`（299 MB，**社群版** `darask0`）。
+
+給定色域圖 + 深度圖後，**3D 人偶精確出現在指定位置**：
+
+| 設定 | 耗時 | 結果 |
 | --- | --- | --- |
-| 官方 25 步 | 4.9 s | 正常 |
-| **Lightning LoRA + 4 步** | **1.5 s** | ✅ 不輸 25 步 |
-| 只有 4 步（無 LoRA） | 1.2 s | ❌ 明顯糊掉 |
+| 無控制（`strength=0`） | 13.6 s | 正常真人 |
+| 控制到 50% | 20.5 s | **人偶出現在指定位置** |
+| 控制到 100% | 13.4 s | 人偶佔更大版面 |
 
-> **LoRA 才是關鍵**：單純把 steps 砍到 4 不會有效果，base 模型需要對應的蒸餾排程。
-> LoRA 只有 **64 MB**（`lightx2v/Qwen-Image-2.1-Lightning`）。
-> 官方另有 Qwen-Image-2.1 Turbo（8 步 / cfg 1），本機未實測。
+**色域圖**＝每個區域一個純色（顏色只是 ID，不代表實際顏色，黑色＝未指定）；
+**深度圖**＝灰階，**近＝白**。
 
-### Qwen-Image 2.1：KV cache ⚠️ 可用但 24GB 卡上沒差異
-
-`QwenImage21Cache` 五種設定（不放節點 / off / auto / cpu+int8 / gpu+int4）
-實測 **4.5～4.9 秒**，差異在雜訊範圍內。
-
-節點 tooltip 說的是「quantization **potentially speeds up edit workflows when memory
-starved**」——這是**記憶體吃緊時的解法**。24GB 卡跑 1024² 單張參考圖不缺記憶體，
-所以看不出來。**在 24GB 卡上這個節點可以先不用管。**
+> ⚠️ 實測重現了 README 明載的「mannequin look」限制：
+> 餵 3D 人偶深度圖會帶出人偶表面質感。
+> README 建議 `end_percent=0.5` 並**搭配 region prompts**（每個顏色一句描述）
+> 才會變成「地圖上那個位置的真實人物」——這點本機尚未測。
 
 ## 五、實務組合建議
 
@@ -240,6 +264,9 @@ python scripts\verify_qwen_extras.py output\extras
 python scripts\verify_qwen_accel.py output\accel
 # 只跑 PE（需先裝好 8.82 GiB 的 PE text encoder）
 python scripts\verify_qwen_accel.py output\accel --pe-only
+
+# 第二輪：官方 Turbo LoRA / MOSS 色深控制 / KV cache 記憶體吃緊情境
+python scripts\verify_qwen_accel2.py output\accel2
 
 # 驗證 ComfyUI 節點快取對量測的影響
 python scripts\cache_test.py
